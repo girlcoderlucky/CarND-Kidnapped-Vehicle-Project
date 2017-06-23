@@ -67,8 +67,6 @@ void ParticleFilter::prediction(double delta_t, double std_pos[], double velocit
 	//  http://en.cppreference.com/w/cpp/numeric/random/normal_distribution
 	//  http://www.cplusplus.com/reference/random/default_random_engine/
 
-	printf("Prediction: delta_t = %f  velocity = %f  yaw_rate = %f\n", delta_t, velocity, yaw_rate);
-
 	default_random_engine gen;
 	normal_distribution<double> dist_x(0, std_pos[0]);
 	normal_distribution<double> dist_y(0, std_pos[1]);
@@ -138,13 +136,15 @@ void ParticleFilter::updateWeights(double sensor_range, double std_landmark[],
     	Particle& particle = particles[i];
 
         vector<LandmarkObs> predictions;
-        unordered_map<int, LandmarkObs> pred_map;
+        unordered_map<int, LandmarkObs> prediction_map;
         for (int j = 0; j < map_landmarks.landmark_list.size(); j++) {
         	Map::single_landmark_s landmark = map_landmarks.landmark_list[j];
-            if (fabs(particle.x - landmark.x_f) <= sensor_range && fabs(particle.y - landmark.y_f) <= sensor_range) {
-                LandmarkObs pred = {landmark.id_i, landmark.x_f, landmark.y_f};
-                predictions.push_back(pred);
-                pred_map[landmark.id_i] = pred;
+        	double f_x = fabs(particle.x - landmark.x_f);
+        	double f_y = fabs(particle.y - landmark.y_f);
+            if ((f_x <= sensor_range) && (f_y <= sensor_range)) {
+                LandmarkObs prediction = {landmark.id_i, landmark.x_f, landmark.y_f};
+                predictions.push_back(prediction);
+                prediction_map[landmark.id_i] = prediction;
             }
         }
 
@@ -164,10 +164,10 @@ void ParticleFilter::updateWeights(double sensor_range, double std_landmark[],
         vector<double> sense_y = vector<double>(landmark_observations.size());
         for (int l = 0; l < landmark_observations.size(); l++){
         	LandmarkObs obs = landmark_observations[l];
-            LandmarkObs pred = pred_map[obs.id];
-            double p = exp(-pow(obs.x - pred.x, 2) / (2 * std_x_2) - pow(obs.y - pred.y, 2.0) /
-                                                                       (2 * std_y_2)) /
-                       std_x_y;
+            LandmarkObs prediction = prediction_map[obs.id];
+            double p_x = pow(obs.x - prediction.x, 2);
+            double p_y =  pow(obs.y - prediction.y, 2);
+            double p = exp(-p_x / (2 * std_x_2) - p_y / (2 * std_y_2)) / std_x_y;
             weight *= p;
             associations.push_back(obs.id);
             sense_x.push_back(obs.x);
@@ -182,6 +182,7 @@ void ParticleFilter::resample() {
 	// TODO: Resample particles with replacement with probability proportional to their weight. 
 	// NOTE: You may find std::discrete_distribution helpful here.
 	//   http://en.cppreference.com/w/cpp/numeric/random/discrete_distribution
+
 	// Generator
 	default_random_engine gen;
 
@@ -189,13 +190,14 @@ void ParticleFilter::resample() {
         weights[i] = particles[i].weight;
     }
 
+    //As suggested using discrete distribution
     discrete_distribution<> d(weights.begin(), weights.end());
 
-    vector<Particle> new_particles;
+    vector<Particle> resampled_particles;
     for (int i = 0; i < particles.size(); i++) {
-        new_particles.push_back(particles[d(gen)]);
+        resampled_particles.push_back(particles[d(gen)]);
     }
-    particles = new_particles;
+    particles = resampled_particles;
 }
 
 Particle ParticleFilter::SetAssociations(Particle particle, std::vector<int> associations, std::vector<double> sense_x, std::vector<double> sense_y)
